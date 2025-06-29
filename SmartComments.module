@@ -1,0 +1,136 @@
+<?php namespace ProcessWire;
+
+/**
+ * ProcessWire SmartComments Module
+ * 
+ * Extends the options for stripTags in Inputfield settings of text fields to allow comments
+ * hooks into all instances of the FieldtypeText, InputfieldText and InputfieldTextarea modules
+ * 
+ * made by kixe (Christoph Thelen) 2025-06-28
+ * Licensed under GNU/GPL v3
+ * @version 1.0.0 2025-06-28
+ * 
+ * ProcessWire 3.x, Copyright 2016 by Ryan Cramer
+ * https://processwire.com
+ * 
+ * @since 1.0.0 - init - 2025-06-28
+ *
+ */
+
+class SmartComments extends WireData implements Module {
+
+	public static function getModuleInfo() {
+		return array(
+			'title' => 'Smart Comments', 
+			'version' => 100, 
+			'summary' => 'Extends the options for stripTags in Inputfield settings of text fields to allow comments.',
+			'singular' => true, 
+			'autoload' => true, 
+			);
+	}
+
+	/**
+	 * Initialize the hooks
+	 *
+	 */
+	public function init() {
+		$this->addHookBefore('FieldtypeText::formatValue', $this, 'fieldtypeTextFormatValue');
+		$this->addHookAfter('InputfieldText::getConfigInputfields', $this, 'inputfieldTextGetConfigInputfields'); 
+		$this->addHookBefore('InputfieldTextarea::render', $this, 'inputfieldTextRender');
+		$this->addHookBefore('InputfieldTextarea::processInput', $this, 'inputfieldTextProcessInput');
+		$this->addHookBefore('InputfieldText::render', $this, 'inputfieldTextRender');
+		$this->addHookBefore('InputfieldText::processInput', $this, 'inputfieldTextProcessInput');  
+		$this->addHookBefore('ProcessPageEdit::headline', $this, 'processPageEditHeadline');
+	}
+
+	public function processPageEditHeadline($e) {
+		$page = $e->object->getPage();
+		if ($page->hasField('title') == false) return;
+		$field = $page->getInputfield('title');
+		if ($field->stripTags != 8) return;
+		if (strpos((string) $page->title,'<') == false) return;
+		$headline = trim(strip_tags(html_entity_decode($e->arguments[0])));
+		$e->arguments(0, $headline);
+	}
+
+	public function fieldtypeTextFormatValue($e) {
+		$page = $e->arguments[0];
+		$field = $e->arguments[1];
+		$value = $e->arguments[2];
+		if ($field->stripTags == 8) {
+			if (!empty($value) && strpos($value, '<?/*') !== false) {
+				$value = trim(preg_replace('/(<\?\/\*)([\s\S]*?)(\*\/\?>)/', '', $value));
+				$e->arguments(2, $value);
+			}
+		}	
+	}
+
+	public function inputfieldTextGetConfigInputfields($e) {
+
+		$modules = $this->wire()->modules;
+		$languages = $this->wire()->languages;
+		$inputfields = $e->return;
+
+		$next = $inputfields->get('placeholder');
+		$inputfields->remove('stripTags');
+
+		/** @var InputfieldRadios $field */
+		$field = $modules->get('InputfieldRadios'); 
+		$field->attr('name', 'stripTags'); 
+		$field->label = $this->_('Strip Tags'); 
+		$field->description = $this->_('Select whether HTML tags should be removed from the input when processing the form.'); 
+		$field->notes = sprintf($this->_('The first two options have the same behavior as in the core version. If the ‘Allow comments’ option is selected, comments are not removed, with %1$s rendered in the markup output and %2$s not displayed in the markup at all, which is the expected result for hardcoded source code.'), '**HTML:** `<!-- comment -->`', '**PHP:** `<?/\* comment \*/?>`'); 
+
+		$field->addOption(0, $this->_('Allow HTML'));
+		$field->addOption(1, $this->_('Strip any HTML tag')); 
+		$field->addOption(8, sprintf($this->_('Allow comments (Extension by module %s)'),'**SmartComments**')); 
+		$field->attr('value', (int) $e->object->stripTags); 
+		if(!$e->object->stripTags) {
+			$field->collapsed = Inputfield::collapsedYes;
+		}
+		$inputfields->insertBefore($field, $next);
+		$e->return = $inputfields;
+	}
+
+	public function inputfieldTextRender($e) {
+		if ($e->object->stripTags == 8) {
+			// show tags
+			$e->object->stripTags = 0;
+			if ($e->object->useLanguage == false || $this->wire('modules')->isInstalled('LanguageSupport') == false) {
+				$value = $e->object->hasPage()->get($e->object->name);
+				$e->object->setAttribute('value', $value);
+			}
+		}
+	}
+
+	public function inputfieldTextProcessInput($e) {
+		if ($e->object->stripTags == 8) {
+			// remove tags, preserve comments
+			$input = $e->arguments[0];
+			$e->object->stripTags = false;
+			if($this->wire('modules')->isInstalled('LanguageSupport')) {
+				foreach (wire('languages') as $language) {
+					$appendix = $language->isDefault()? '' : "__$language->id";
+					$value = $input->get($e->object->name . $appendix);
+					$input->set($e->object->name . $appendix, $this->stripTagsPreserveComments($value));
+				}
+			} else {
+				$input->set($e->object->name, $this->stripTagsPreserveComments($input->get($e->object->name)));
+			}
+			$e->arguments(0, $input);
+		}
+	}
+
+	protected function stripTagsPreserveComments($string) {
+		if (strpos($string, '<') === false) return $string;
+		// replace comment tags to prevent them from being stripped
+		$string = preg_replace('/(<!--)([\s\S]*?)(-->)/', '¿¿¿!--$2--¿¿¿', $string);
+		$string = preg_replace('/(<\?\/\*)([\s\S]*?)(\*\/\?>)/', '¿¿¿?/*$2*/?¿¿¿', $string);
+		// strip tags
+		$string = strip_tags($string);
+		// restore comments
+		$string = preg_replace('/(¿¿¿!--)([\s\S]*?)(--¿¿¿)/', '<!--$2-->', $string);
+		$string = preg_replace('/(¿¿¿\?\/\*)([\s\S]*?)(\*\/\?¿¿¿)/', '<?/*$2*/?>', $string);
+		return $string;
+	}
+}
