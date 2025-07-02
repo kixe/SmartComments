@@ -9,7 +9,7 @@ Without this module, it is not possible to add multi-line comments that were not
 ## Syntax & Visibility
 Behavior when the **‘Allow comments’** option is selected for **StripTags** in the input field settings.
 
-|Syntax|ProcessPageEdit (Inputfield)|formatted output| ProcessPageList (label)[^1] |ProcessPageEdit (headline)[^2] |
+|Syntax|ProcessPageEdit (Inputfield)|formatted output|ProcessPageEdit (headline)[^1]|ProcessPageList (label)[^2]|
 |:-|:-:|:-:|:-:|:-:|
 |`<!-- comment -->`|✓|✓|✓|×|
 |`<?/* comment */?>`|✓|×|×|×|
