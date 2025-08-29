@@ -8,7 +8,7 @@
  * 
  * made by kixe (Christoph Thelen) 2025-06-28
  * Licensed under GNU/GPL v3
- * @version 1.0.2 2025-08-06
+ * @version 1.0.4 2025-08-29
  * 
  * ProcessWire 3.x, Copyright 2016 by Ryan Cramer
  * https://processwire.com
@@ -17,6 +17,7 @@
  * @since 1.0.1 - added option to allow HTML and PHP comments (to be removed in frontend output) - 2025-08-01
  * @since 1.0.2 - fixed bug: Exception thrown if used with InputfieldCKEditor or InputfieldTinyMCE, disabled for those - 2025-08-06
  * @since 1.0.3 - fixed bug: inputfieldTextRender() property value must be set for user in default language, removed unnecessary hook, fixed typo: property useLanguage[s] - 2025-08-21
+ * @since 1.0.4 - fixed bug in hook ProcessPageEdit::headline. Unable to change template if getInputfield() is used instead of getField() - 2025-08-29
  * 
  * @todo fix bug: if a php comment is set and saved and later switched back to core strip_tags comment will not be stripped after save unless a change of the visible value is done.
  *
@@ -28,7 +29,7 @@ class SmartComments extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Smart Comments', 
-			'version' => 103, 
+			'version' => 104, 
 			'summary' => 'Extends the options for stripTags in Inputfield settings of text fields to allow comments.',
 			'singular' => true, 
 			'autoload' => true, 
@@ -53,8 +54,8 @@ class SmartComments extends WireData implements Module {
 		$page = $e->object->getPage();
 		if (empty($page) || $page instanceof Page == false) return;
 		if ($page->hasField('title') == false) return;
-		$field = $page->getInputfield('title');
-		if ($field->stripTags < 8) return;
+		$field = $page->getField('title');
+		if (!$field || $field->stripTags < 8) return;
 		if (strpos((string) $page->title,'<') === false) return;
 		$headline = trim(strip_tags(html_entity_decode($e->arguments[0])));
 		$e->arguments(0, $headline);
